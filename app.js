@@ -50,13 +50,15 @@ const client = new Client({
       '--no-first-run',
       '--no-zygote',
       '--single-process', // <- this one doesn't works in Windows
-      '--disable-gpu'
+      '--disable-gpu',
+      '--proxy-server=proxy3.bri.co.id:1707'
     ],
   },
   authStrategy: new LocalAuth()
 });
 
 client.on('message', msg => {
+  // console.log('message', msg.body)
   if (msg.body == '!ping') {
     msg.reply('pong');
   } else if (msg.body == 'good morning') {
@@ -225,6 +227,70 @@ app.post('/send-media', async (req, res) => {
   client.sendMessage(number, media, {
     caption: caption
   }).then(response => {
+    res.status(200).json({
+      status: true,
+      response: response
+    });
+  }).catch(err => {
+    res.status(500).json({
+      status: false,
+      response: err
+    });
+  });
+});
+
+app.post('/send-group-media', [
+  body('id').custom((value, { req }) => {
+    if (!value && !req.body.name) {
+      throw new Error('Invalid value, you can use `id` or `name`');
+    }
+    return true;
+  }),
+  body('message').notEmpty(),
+], async (req, res) => {
+
+  let chatId = req.body.id;
+  const groupName = req.body.name;
+
+  // Find the group by name
+  if (!chatId) {
+    const group = await findGroupByName(groupName);
+    if (!group) {
+      return res.status(422).json({
+        status: false,
+        message: 'No group found with name: ' + groupName
+      });
+    }
+    chatId = group.id._serialized;
+  }
+
+  const number = chatId;
+  const caption = req.body.caption;
+  const fileUrl = req.body.file;
+
+  //const media = MessageMedia.fromFilePath('./image-example.png');
+  const media = MessageMedia.fromFilePath(fileUrl);
+
+  // const file = req.files.file;
+  // const media = new MessageMedia(file.mimetype, file.data.toString('base64'), file.name);
+
+  // let mimetype;
+  // const attachment = await axios.get(fileUrl, {
+  //   responseType: 'arraybuffer'
+  // }).then(response => {
+  //   mimetype = response.headers['content-type'];
+  //   return response.data.toString('base64');
+  // });
+
+  // const media = new MessageMedia(mimetype, attachment, 'Media');
+
+  client.sendMessage(number, media, {
+    caption: caption
+  }).then(response => {
+    fs.unlink(fileUrl, (err) => {
+      if(err) console.error(err);
+      console.log('file:',fileUrl, ' ,success deleted')
+    });
     res.status(200).json({
       status: true,
       response: response
